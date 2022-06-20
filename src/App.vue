@@ -46,10 +46,9 @@ export default {
   data() {
     return {
       modules: [],
-      courses: [],
-      practicals: [],
+      removedModules: [], // maybe make a nested array with three entries (removed after first selection, removed after second selection, removed after last selection_)
       choices: [],
-      testListOfAvailableModules: []
+      canMakeChoice: true
     }
   },
   mounted() {
@@ -57,72 +56,6 @@ export default {
     this.fetchAllModules();
   },
   methods: {
-    async fetchAllCourses() {
-      const response = await supabase
-        .from('courses')
-        .select()
-      this.courses = response.data;
-    },
-
-/*
---------------------------------------------------------------------------------------------
-@requires: all modules available for selection (provided by calling it on fetchAllModules())
-
-@requires: all of the column entries of the module that user selects, specifically id in the data table, 
-subject(PRA/NEU/MAT/etc.), code(1011/3008/etc.), and start-end time pairs in Date format,
-where each pair corresponds to day of the week and the specific timeslot 
-(i.e. 2022-06-14 8:30, 2022-06-14 10:30 which corresponds to Monday morning slot)
-
-@returns:  all of the options available after the selection has been made
-
-TODO: assert that no more than two courses can be available for selection
-TODO: refactor! the functions used for filtering can be extracted to improve readability
-*/
-
-    matchModules(selectedModule) {
-
-      // console.log(selectedModule.code)
-
-      // ----- Scenario 1: Practical was selected, show all courses available for selection
-
-      if (selectedModule.subject == 'PRA') {
-
-        // We dont want to remove them now APPARENTELY
-        // Step 1: remove all other practicals from availability list
-        this.modules = this.modules.filter(function(practical) {
-         return practical.subject !== 'PRA'
-        })
-
-        // Step 2: compare timeslot for each course in the availability list and remove overlapping ones
-        this.modules = this.modules.filter(courseInTheTable => this.filterOutPractical(courseInTheTable, selectedModule, false))
-      }
-
-      // ----- Scenario 2: Course was selected, show all practicals and courses available for selection
-      else {
-
-        // show all available courses
-        this.modules = this.modules.filter(function(course) {
-
-        // get timeslots for the course from the list of available courses
-          const rangeCourseDay1 = moment.range(course.start1, course.end1)
-          const rangeCourseDay2 = moment.range(course.start2, course.end2)
-
-        // get timeslots of the course that was selected (input course)
-          const rangePracticalDay1 = moment.range(selectedModule.start1, selectedModule.end1);
-          const rangePracticalDay2 = moment.range(selectedModule.start2, selectedModule.end2);
-
-          // if at least one timeslot overlaps -> remove course
-          return (!(rangeCourseDay1.overlaps(rangePracticalDay1) || rangeCourseDay1.overlaps(rangePracticalDay2)) || !(rangeCourseDay2.overlaps(rangePracticalDay1) || rangeCourseDay2.overlaps(rangePracticalDay2)))
-        })
-
-        // show all available practicals
-        this.modules = this.modules.filter(practicalInTheTable => this.filterOutPractical(selectedModule, practicalInTheTable, true))
-      }
-      this.addChoice(selectedModule.id, selectedModule.subject, selectedModule.code);
-      return this.modules
-    },
-//--------------------------------------------------------------------------------------------
-
     async fetchAllModules() {
       const response = await supabase
         .from('modules')
@@ -156,8 +89,93 @@ TODO: refactor! the functions used for filtering can be extracted to improve rea
         code: code
       };
       this.choices = [...this.choices, choice]
+      this.checkChoices();
       return this.choices
     },
+    checkChoices() {
+      var iterator = 0;
+      this.choices.forEach(element => {
+        if (element.subject !== 'PRA') {
+          iterator++;
+        }
+      })
+
+      // iterator corresponds to  the number of courses that have been selected
+      if (iterator == 2) {
+        this.modules = this.modules.filter(course => course.subject == 'PRA')
+      }
+
+      if (this.choices.length == 3) {
+        this.canMakeChoice = false;
+        this.modules = []
+        
+      }
+      else {
+        this.canMakeChoice = true;
+      }
+
+      // console.log(this.canMakeChoice)
+    },
+/*
+--------------------------------------------------------------------------------------------
+@requires: all modules available for selection (provided by calling it on fetchAllModules())
+
+@requires: all of the column entries of the module that user selects, specifically id in the data table, 
+subject(PRA/NEU/MAT/etc.), code(1011/3008/etc.), and start-end time pairs in Date format,
+where each pair corresponds to day of the week and the specific timeslot 
+(i.e. 2022-06-14 8:30, 2022-06-14 10:30 which corresponds to Monday morning slot)
+
+@returns:  all of the options available after the selection has been made
+
+TODO: assert that no more than two courses can be available for selection
+TODO: refactor! the functions used for filtering can be extracted to improve readability
+*/
+
+    matchModules(selectedModule) {
+
+      if (this.canMakeChoice) {
+
+          // ----- Scenario 1: Practical was selected, show all courses available for selection
+
+          if (selectedModule.subject == 'PRA') {
+
+            // We dont want to remove them now APPARENTELY
+            // Step 1: remove all other practicals from availability list
+            this.modules = this.modules.filter(function(practical) {
+            return practical.subject !== 'PRA'
+            })
+
+            // Step 2: compare timeslot for each course in the availability list and remove overlapping ones
+            this.modules = this.modules.filter(courseInTheTable => this.filterOutPractical(courseInTheTable, selectedModule, false))
+          }
+
+          // ----- Scenario 2: Course was selected, show all practicals and courses available for selection
+          else {
+
+            // show all available courses
+            this.modules = this.modules.filter(function(course) {
+
+            // get timeslots for the course from the list of available courses
+              const rangeCourseDay1 = moment.range(course.start1, course.end1)
+              const rangeCourseDay2 = moment.range(course.start2, course.end2)
+
+            // get timeslots of the course that was selected (input course)
+              const rangePracticalDay1 = moment.range(selectedModule.start1, selectedModule.end1);
+              const rangePracticalDay2 = moment.range(selectedModule.start2, selectedModule.end2);
+
+              // if at least one timeslot overlaps -> remove course
+              return (!(rangeCourseDay1.overlaps(rangePracticalDay1) || rangeCourseDay1.overlaps(rangePracticalDay2)) || !(rangeCourseDay2.overlaps(rangePracticalDay1) || rangeCourseDay2.overlaps(rangePracticalDay2)))
+            })
+
+            // show all available practicals
+            this.modules = this.modules.filter(practicalInTheTable => this.filterOutPractical(selectedModule, practicalInTheTable, true))
+          }
+          this.addChoice(selectedModule.id, selectedModule.subject, selectedModule.code);
+
+          return this.modules
+        }
+  },      
+//--------------------------------------------------------------------------------------------
 
     /* @requires: practical input and course input, one of which will correspond to the selected module 
     and the other will represent the module object passed in by the filter function, as per selectedModule() function
@@ -169,7 +187,7 @@ TODO: refactor! the functions used for filtering can be extracted to improve rea
         const rangeCourseDay2 = moment.range(course.start2, course.end2)
 
          // get the timeslot for the first day when the practical is offered
-        const rangePracticalDay1 = moment.range(practical.start1, practical.end1)
+        // const rangePracticalDay1 = moment.range(practical.start1, practical.end1)
 
         // if practical is only offered once a day 
         // we cant assume which day it is, so we check all three
